@@ -10,8 +10,11 @@ const rateLimitMap = new Map<string, RateLimitRecord>();
 // Clean up old entries every 5 minutes
 setInterval(() => {
   const now = Date.now();
-  for (const [key, record] of rateLimitMap.entries()) {
-    if (now - record.timestamp > 300000) {
+  const keys = Array.from(rateLimitMap.keys());
+  for (let i = 0; i < keys.length; i++) {
+    const key = keys[i];
+    const record = rateLimitMap.get(key);
+    if (record && now - record.timestamp > 300000) {
       rateLimitMap.delete(key);
     }
   }
@@ -22,7 +25,8 @@ export function rateLimit(
   limit: number = 10,
   windowMs: number = 60000
 ): NextResponse | null {
-  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "anonymous";
+  const forwardedFor = req.headers.get("x-forwarded-for");
+  const ip = forwardedFor ? forwardedFor.split(",")[0].trim() : "anonymous";
   const now = Date.now();
   const record = rateLimitMap.get(ip);
 
