@@ -1,4 +1,4 @@
-import { createServerClient } from "@supabase/ssr";
+import { createServerClient, type CookieMethodsServer } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 export async function updateSession(request: NextRequest) {
@@ -12,7 +12,7 @@ export async function updateSession(request: NextRequest) {
         getAll() {
           return request.cookies.getAll();
         },
-        setAll(cookiesToSet) {
+        setAll(cookiesToSet: Parameters<CookieMethodsServer["setAll"]>[0]) {
           cookiesToSet.forEach(({ name, value }) =>
             request.cookies.set(name, value)
           );
@@ -21,7 +21,7 @@ export async function updateSession(request: NextRequest) {
             supabaseResponse.cookies.set(name, value, options)
           );
         },
-      },
+      } satisfies CookieMethodsServer,
     }
   );
 
@@ -30,14 +30,16 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const { pathname } = request.nextUrl;
+
   const isAuthRoute = pathname.startsWith("/auth");
-  const isDashboardRoute =
-    pathname.startsWith("/dashboard") ||
-    pathname.startsWith("/services") ||
-    pathname.startsWith("/orders") ||
-    pathname.startsWith("/wallet") ||
-    pathname.startsWith("/support") ||
-    pathname.startsWith("/settings");
+  const isDashboardRoute = [
+    "/dashboard",
+    "/services",
+    "/orders",
+    "/wallet",
+    "/support",
+    "/settings",
+  ].some((route) => pathname.startsWith(route));
 
   if (!user && isDashboardRoute) {
     return NextResponse.redirect(new URL("/auth/login", request.url));
