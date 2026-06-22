@@ -1,5 +1,5 @@
 "use client";
-import { useEffect } from "react";
+import { useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useAppStore } from "@/store/useAppStore";
@@ -10,23 +10,28 @@ export function useAuth() {
   const router = useRouter();
   const supabase = createClient();
 
+  const fetchProfile = useCallback(async (userId: string) => {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", userId)
+      .single();
+    return profile as AppUser | null;
+  }, [supabase]);
+
   useEffect(() => {
     const { data: listener } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
         if (session?.user) {
-          const { data: profile } = await supabase
-            .from("profiles")
-            .select("*")
-            .eq("id", session.user.id)
-            .single();
-          setUser(profile as AppUser);
+          const profile = await fetchProfile(session.user.id);
+          setUser(profile);
         } else {
           setUser(null);
         }
       }
     );
     return () => listener.subscription.unsubscribe();
-  }, []);
+  }, [supabase, setUser, fetchProfile]);
 
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });

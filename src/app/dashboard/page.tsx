@@ -33,7 +33,7 @@ function OrderRow({ order }: { order: Order }) {
   const s = STATUS_STYLES[order.status] ?? STATUS_STYLES["Pending"];
   return (
     <tr style={{ borderTop: "1px solid #1e2840" }}>
-      <td style={{ padding: "12px 16px", color: "#a78bfa", fontWeight: 700, whiteSpace: "nowrap" }}>{order.id}</td>
+      <td style={{ padding: "12px 16px", color: "#a78bfa", fontWeight: 700, whiteSpace: "nowrap" }}>{order.id.slice(0, 8)}...</td>
       <td style={{ padding: "12px 16px", color: "#e5e7eb", maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{order.service_name}</td>
       <td style={{ padding: "12px 16px", color: "#9ca3af" }}>{fmtNum(order.quantity)}</td>
       <td style={{ padding: "12px 16px", color: "#fff", fontWeight: 700 }}>{fmt(order.amount)}</td>

@@ -1,7 +1,9 @@
+import "server-only";
 import axios from "axios";
 
 const provider = axios.create({
   baseURL: process.env.SMM_PROVIDER_URL,
+  timeout: 30000,
 });
 
 const KEY = process.env.SMM_PROVIDER_API_KEY!;

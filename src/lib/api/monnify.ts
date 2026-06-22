@@ -1,13 +1,19 @@
-// src/lib/api/monnify.ts
+import "server-only";
 import axios from "axios";
 
-const MONNIFY_BASE_URL = "https://api.monnify.com";
-// Use sandbox for dev: https://sandbox.monnify.com
+const MONNIFY_BASE_URL = process.env.NODE_ENV === "production" 
+  ? "https://api.monnify.com"
+  : "https://sandbox.monnify.com";
 
 const getAccessToken = async (): Promise<string> => {
-  const credentials = Buffer.from(
-    `${process.env.MONNIFY_API_KEY}:${process.env.MONNIFY_SECRET_KEY}`
-  ).toString("base64");
+  const apiKey = process.env.MONNIFY_API_KEY;
+  const secretKey = process.env.MONNIFY_SECRET_KEY;
+
+  if (!apiKey || !secretKey) {
+    throw new Error("Monnify credentials not configured");
+  }
+
+  const credentials = Buffer.from(`${apiKey}:${secretKey}`).toString("base64");
 
   const { data } = await axios.post(
     `${MONNIFY_BASE_URL}/api/v1/auth/login`,

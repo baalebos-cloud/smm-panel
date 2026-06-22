@@ -1,4 +1,3 @@
-// src/types/service.ts
 export type Platform =
   | "instagram"
   | "tiktok"

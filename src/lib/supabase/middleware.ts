@@ -12,7 +12,6 @@ export async function updateSession(request: NextRequest) {
         getAll() {
           return request.cookies.getAll();
         },
-        // Wrapped in NonNullable to prevent the TypeScript compilation error
         setAll(cookiesToSet: Parameters<NonNullable<CookieMethodsServer["setAll"]>>[0]) {
           try {
             cookiesToSet.forEach(({ name, value }) =>
@@ -23,9 +22,7 @@ export async function updateSession(request: NextRequest) {
               supabaseResponse.cookies.set(name, value, options)
             );
           } catch {
-            // The `createServerClient` can sometimes be called in an environment
-            // where cookies cannot be modified (like during static rendering).
-            // Safe to ignore.
+            // Safe to ignore in static rendering environments
           }
         },
       } satisfies CookieMethodsServer,

@@ -3,8 +3,13 @@ import { createClient } from "@/lib/supabase/server";
 import { placeProviderOrder } from "@/lib/api/smm-provider";
 import { ALL_SERVICES } from "@/lib/constants";
 import { calcCost } from "@/lib/utils";
+import { rateLimit } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
+  // Rate limiting
+  const rateLimitResponse = rateLimit(req, 10, 60000);
+  if (rateLimitResponse) return rateLimitResponse;
+
   try {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -16,6 +21,15 @@ export async function POST(req: NextRequest) {
       link: string;
       quantity: number;
     };
+
+    // Validate input
+    if (!serviceId || !link || !quantity) {
+      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    }
+
+    if (typeof quantity !== "number" || quantity <= 0) {
+      return NextResponse.json({ error: "Invalid quantity" }, { status: 400 });
+    }
 
     const service = ALL_SERVICES.find((s) => s.id === serviceId);
     if (!service) return NextResponse.json({ error: "Service not found" }, { status: 404 });
@@ -29,28 +43,25 @@ export async function POST(req: NextRequest) {
 
     const cost = calcCost(quantity, service.rate);
 
-    // Check and deduct wallet balance
-    const { data: profile, error: profileError } = await supabase
-      .from("profiles")
-      .select("wallet_balance")
-      .eq("id", user.id)
-      .single();
+    // Atomically deduct wallet balance (prevents race conditions)
+    const { data: deductResult, error: deductError } = await supabase.rpc(
+      "deduct_wallet_balance",
+      {
+        p_user_id: user.id,
+        p_amount: cost,
+      }
+    );
 
-    if (profileError || !profile) {
-      return NextResponse.json({ error: "Profile not found" }, { status: 404 });
+    if (deductError) {
+      console.error("[POST /api/orders] Deduct error:", deductError);
+      return NextResponse.json({ error: "Failed to process payment" }, { status: 500 });
     }
 
-    if (profile.wallet_balance < cost) {
+    if (deductResult === false) {
       return NextResponse.json({ error: "Insufficient wallet balance" }, { status: 400 });
     }
 
-    // Deduct balance
-    await supabase
-      .from("profiles")
-      .update({ wallet_balance: profile.wallet_balance - cost })
-      .eq("id", user.id);
-
-    // Place order with provider (comment out until you have real API key)
+    // Place order with provider
     let providerOrderId: number | null = null;
     try {
       const providerRes = await placeProviderOrder({
@@ -59,12 +70,13 @@ export async function POST(req: NextRequest) {
         quantity,
       });
       providerOrderId = providerRes.order;
-    } catch {
+    } catch (providerError) {
       // Provider order failed — refund and abort
-      await supabase
-        .from("profiles")
-        .update({ wallet_balance: profile.wallet_balance })
-        .eq("id", user.id);
+      console.error("[POST /api/orders] Provider error:", providerError);
+      await supabase.rpc("credit_wallet_balance", {
+        p_user_id: user.id,
+        p_amount: cost,
+      });
       return NextResponse.json({ error: "Failed to place order with provider" }, { status: 502 });
     }
 
@@ -84,7 +96,15 @@ export async function POST(req: NextRequest) {
       .select()
       .single();
 
-    if (orderError) throw orderError;
+    if (orderError) {
+      console.error("[POST /api/orders] Order insert error:", orderError);
+      // Refund if order creation fails
+      await supabase.rpc("credit_wallet_balance", {
+        p_user_id: user.id,
+        p_amount: cost,
+      });
+      return NextResponse.json({ error: "Failed to create order" }, { status: 500 });
+    }
 
     // Log wallet transaction
     await supabase.from("wallet_transactions").insert({

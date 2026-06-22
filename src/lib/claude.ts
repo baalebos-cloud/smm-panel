@@ -1,3 +1,4 @@
+import "server-only";
 import Anthropic from "@anthropic-ai/sdk";
 
 const anthropic = new Anthropic({
@@ -30,7 +31,7 @@ export interface ChatMessage {
 
 export async function getChatReply(messages: ChatMessage[]): Promise<string> {
   const response = await anthropic.messages.create({
-    model: "claude-sonnet-4-6",
+    model: "claude-sonnet-4-20250514",
     max_tokens: 1024,
     system: SYSTEM_PROMPT,
     messages: messages.map((m) => ({

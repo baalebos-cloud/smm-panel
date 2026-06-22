@@ -120,15 +120,6 @@ export default function LoginPage() {
             />
           </div>
 
-          <div style={{ display: "flex", justifyContent: "flex-end" }}>
-            <Link
-              href="/auth/forgot-password"
-              style={{ fontSize: 12, color: "#7c3aed", textDecoration: "none" }}
-            >
-              Forgot password?
-            </Link>
-          </div>
-
           <button
             onClick={handleSubmit}
             disabled={loading}

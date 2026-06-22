@@ -1,3 +1,4 @@
+// src/types/order.ts
 export type OrderStatus =
   | "Pending"
   | "Processing"
@@ -13,7 +14,7 @@ export interface Order {
   service_name: string;
   link: string;
   quantity: number;
-  amount: number; // in Naira (kobo * 100)
+  amount: number; // in Naira
   status: OrderStatus;
   start_count?: number;
   remains?: number;

@@ -55,7 +55,7 @@ CREATE TABLE IF NOT EXISTS services (
 CREATE TABLE IF NOT EXISTS orders (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
-  service_id INTEGER NOT NULL,
+  service_id INTEGER NOT NULL REFERENCES services(id),
   service_name TEXT NOT NULL,
   link TEXT NOT NULL,
   quantity INTEGER NOT NULL,
@@ -68,6 +68,10 @@ CREATE TABLE IF NOT EXISTS orders (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Index for faster order lookups
+CREATE INDEX IF NOT EXISTS idx_orders_user_id ON orders(user_id);
+CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
 
 -- ============================================================
 -- 004_wallet_transactions.sql
@@ -83,6 +87,10 @@ CREATE TABLE IF NOT EXISTS wallet_transactions (
   description TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Index for faster transaction lookups
+CREATE INDEX IF NOT EXISTS idx_wallet_tx_user_id ON wallet_transactions(user_id);
+CREATE INDEX IF NOT EXISTS idx_wallet_tx_reference ON wallet_transactions(reference);
 
 -- ============================================================
 -- 005_rls_policies.sql
@@ -109,3 +117,53 @@ CREATE POLICY "wallet_tx_select_self" ON wallet_transactions
 
 CREATE POLICY "wallet_tx_insert_self" ON wallet_transactions
   FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+-- ============================================================
+-- 006_atomic_wallet_functions.sql
+-- ============================================================
+
+-- Atomic wallet deduction function (prevents race conditions)
+CREATE OR REPLACE FUNCTION deduct_wallet_balance(p_user_id UUID, p_amount NUMERIC)
+RETURNS BOOLEAN AS $$
+DECLARE
+  current_balance NUMERIC;
+BEGIN
+  -- Lock the row and get current balance
+  SELECT wallet_balance INTO current_balance 
+  FROM profiles 
+  WHERE id = p_user_id 
+  FOR UPDATE;
+  
+  IF current_balance >= p_amount THEN
+    UPDATE profiles 
+    SET wallet_balance = wallet_balance - p_amount 
+    WHERE id = p_user_id;
+    RETURN TRUE;
+  ELSE
+    RETURN FALSE;
+  END IF;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Atomic wallet credit function (prevents race conditions)
+CREATE OR REPLACE FUNCTION credit_wallet_balance(p_user_id UUID, p_amount NUMERIC)
+RETURNS VOID AS $$
+BEGIN
+  UPDATE profiles 
+  SET wallet_balance = wallet_balance + p_amount 
+  WHERE id = p_user_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Function to get current balance (for verification)
+CREATE OR REPLACE FUNCTION get_wallet_balance(p_user_id UUID)
+RETURNS NUMERIC AS $$
+DECLARE
+  balance NUMERIC;
+BEGIN
+  SELECT wallet_balance INTO balance 
+  FROM profiles 
+  WHERE id = p_user_id;
+  RETURN COALESCE(balance, 0);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;

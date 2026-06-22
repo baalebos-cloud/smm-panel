@@ -65,16 +65,18 @@ export default function RegisterPage() {
         )}
 
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          {[
-            { label: "Full Name", val: fullName, set: setFullName, type: "text", ph: "John Doe" },
-            { label: "Email Address", val: email, set: setEmail, type: "email", ph: "you@example.com" },
-            { label: "Password (min 8 chars)", val: password, set: setPassword, type: "password", ph: "••••••••" },
-          ].map(({ label, val, set, type, ph }) => (
-            <div key={label}>
-              <label style={{ fontSize: 12, color: "#9ca3af", display: "block", marginBottom: 6 }}>{label}</label>
-              <input type={type} value={val} onChange={(e) => set(e.target.value)} placeholder={ph} style={inputStyle} />
-            </div>
-          ))}
+          <div>
+            <label style={{ fontSize: 12, color: "#9ca3af", display: "block", marginBottom: 6 }}>Full Name</label>
+            <input type="text" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="John Doe" style={inputStyle} />
+          </div>
+          <div>
+            <label style={{ fontSize: 12, color: "#9ca3af", display: "block", marginBottom: 6 }}>Email Address</label>
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" style={inputStyle} />
+          </div>
+          <div>
+            <label style={{ fontSize: 12, color: "#9ca3af", display: "block", marginBottom: 6 }}>Password (min 8 chars)</label>
+            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" style={inputStyle} />
+          </div>
 
           <button
             onClick={handleSubmit}

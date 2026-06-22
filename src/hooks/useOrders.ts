@@ -14,7 +14,7 @@ export function useOrders() {
       .select("*")
       .order("created_at", { ascending: false });
     if (data) setOrders(data as Order[]);
-  }, []);
+  }, [supabase, setOrders]);
 
   useEffect(() => {
     fetchOrders();
