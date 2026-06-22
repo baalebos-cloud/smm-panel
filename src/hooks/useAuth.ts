@@ -10,32 +10,70 @@ export function useAuth() {
   const router = useRouter();
   const supabase = createClient();
 
-  const fetchProfile = useCallback(async (userId: string) => {
-    const { data: profile } = await supabase
+  const fetchProfile = useCallback(async (userId: string): Promise<AppUser | null> => {
+    const { data: profile, error } = await supabase
       .from("profiles")
       .select("*")
       .eq("id", userId)
       .single();
-    return profile as AppUser | null;
+    
+    if (error || !profile) {
+      console.log("Profile not found, syncing...");
+      // Try to sync/create profile
+      try {
+        await fetch("/api/auth/sync-profile", { method: "POST" });
+        // Retry fetching
+        const { data: retryProfile } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", userId)
+          .single();
+        return retryProfile as AppUser | null;
+      } catch {
+        return null;
+      }
+    }
+    
+    return profile as AppUser;
   }, [supabase]);
 
+  // Fetch user on initial load
   useEffect(() => {
+    const initializeAuth = async () => {
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (authUser) {
+        const profile = await fetchProfile(authUser.id);
+        setUser(profile);
+      }
+    };
+
+    initializeAuth();
+
+    // Listen for auth changes
     const { data: listener } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
-        if (session?.user) {
+      async (event, session) => {
+        if (event === "SIGNED_IN" && session?.user) {
           const profile = await fetchProfile(session.user.id);
           setUser(profile);
-        } else {
+        } else if (event === "SIGNED_OUT") {
           setUser(null);
         }
       }
     );
+
     return () => listener.subscription.unsubscribe();
   }, [supabase, setUser, fetchProfile]);
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
+    
+    // Fetch and set profile immediately after sign in
+    if (data.user) {
+      const profile = await fetchProfile(data.user.id);
+      setUser(profile);
+    }
+    
     router.push("/dashboard");
   };
 

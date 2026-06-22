@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { useWallet } from "@/hooks/useWallet";
 import { useAppStore } from "@/store/useAppStore";
@@ -7,7 +7,7 @@ import { fmt } from "@/lib/utils";
 
 const QUICK_AMOUNTS = [1000, 2000, 5000, 10000, 20000, 50000];
 
-export default function WalletPage() {
+function WalletContent() {
   const searchParams = useSearchParams();
   const { balance } = useWallet();
   const user = useAppStore((s) => s.user);
@@ -108,7 +108,7 @@ export default function WalletPage() {
           {fmt(balance)}
         </div>
         <div style={{ color: "#c4b5fd", fontSize: 12, marginTop: 8 }}>
-          👤 {user?.email || "Loading..."}
+          👤 {user?.email || user?.full_name || "Guest"}
         </div>
       </div>
 
@@ -218,5 +218,20 @@ export default function WalletPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function WalletPage() {
+  return (
+    <Suspense fallback={
+      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "#6b7280" }}>
+        <div style={{ textAlign: "center" }}>
+          <div style={{ fontSize: 32, marginBottom: 12 }}>💳</div>
+          <div>Loading wallet...</div>
+        </div>
+      </div>
+    }>
+      <WalletContent />
+    </Suspense>
   );
 }
