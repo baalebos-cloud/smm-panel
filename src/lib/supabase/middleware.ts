@@ -12,14 +12,21 @@ export async function updateSession(request: NextRequest) {
         getAll() {
           return request.cookies.getAll();
         },
-        setAll(cookiesToSet: Parameters<CookieMethodsServer["setAll"]>[0]) {
-          cookiesToSet.forEach(({ name, value }) =>
-            request.cookies.set(name, value)
-          );
-          supabaseResponse = NextResponse.next({ request });
-          cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options)
-          );
+        // Wrapped in NonNullable to prevent the TypeScript compilation error
+        setAll(cookiesToSet: Parameters<NonNullable<CookieMethodsServer["setAll"]>>[0]) {
+          try {
+            cookiesToSet.forEach(({ name, value }) =>
+              request.cookies.set(name, value)
+            );
+            supabaseResponse = NextResponse.next({ request });
+            cookiesToSet.forEach(({ name, value, options }) =>
+              supabaseResponse.cookies.set(name, value, options)
+            );
+          } catch {
+            // The `createServerClient` can sometimes be called in an environment
+            // where cookies cannot be modified (like during static rendering).
+            // Safe to ignore.
+          }
         },
       } satisfies CookieMethodsServer,
     }
