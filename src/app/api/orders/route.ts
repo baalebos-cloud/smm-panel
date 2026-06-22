@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { placeProviderOrder } from "@/lib/api/smm-provider";
 import { ALL_SERVICES } from "@/lib/constants";
 import { calcCost } from "@/lib/utils";
@@ -43,8 +44,11 @@ export async function POST(req: NextRequest) {
 
     const cost = calcCost(quantity, service.rate);
 
+    // Use admin client to bypass RLS
+    const adminClient = createAdminClient();
+
     // Atomically deduct wallet balance (prevents race conditions)
-    const { data: deductResult, error: deductError } = await supabase.rpc(
+    const { data: deductResult, error: deductError } = await adminClient.rpc(
       "deduct_wallet_balance",
       {
         p_user_id: user.id,
@@ -73,7 +77,7 @@ export async function POST(req: NextRequest) {
     } catch (providerError) {
       // Provider order failed — refund and abort
       console.error("[POST /api/orders] Provider error:", providerError);
-      await supabase.rpc("credit_wallet_balance", {
+      await adminClient.rpc("credit_wallet_balance", {
         p_user_id: user.id,
         p_amount: cost,
       });
@@ -81,7 +85,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Save order to DB
-    const { data: order, error: orderError } = await supabase
+    const { data: order, error: orderError } = await adminClient
       .from("orders")
       .insert({
         user_id: user.id,
@@ -99,7 +103,7 @@ export async function POST(req: NextRequest) {
     if (orderError) {
       console.error("[POST /api/orders] Order insert error:", orderError);
       // Refund if order creation fails
-      await supabase.rpc("credit_wallet_balance", {
+      await adminClient.rpc("credit_wallet_balance", {
         p_user_id: user.id,
         p_amount: cost,
       });
@@ -107,7 +111,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Log wallet transaction
-    await supabase.from("wallet_transactions").insert({
+    await adminClient.from("wallet_transactions").insert({
       user_id: user.id,
       type: "debit",
       amount: cost,
