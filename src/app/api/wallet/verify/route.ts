@@ -1,10 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyPayment } from "@/lib/api/monnify";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 
+const PAYMENT_PROVIDER = process.env.PAYMENT_PROVIDER || "monnify";
+
+const getPaymentModule = async () => {
+  if (PAYMENT_PROVIDER === "strowallet") {
+    return await import("@/lib/api/strowallet");
+  }
+  return await import("@/lib/api/monnify");
+};
+
 export async function GET(req: NextRequest) {
-  const transactionReference = req.nextUrl.searchParams.get("transactionReference");
+  // Support both Monnify and Strowallet callback params
+  const transactionReference = 
+    req.nextUrl.searchParams.get("transactionReference") || 
+    req.nextUrl.searchParams.get("reference") ||
+    req.nextUrl.searchParams.get("tx_ref");
 
   if (!transactionReference) {
     return NextResponse.redirect(new URL("/wallet?status=failed&reason=missing_reference", req.url));
@@ -18,10 +30,9 @@ export async function GET(req: NextRequest) {
       return NextResponse.redirect(new URL("/auth/login", req.url));
     }
 
-    // Use admin client to bypass RLS
     const adminClient = createAdminClient();
 
-    // Idempotency check - prevent double processing
+    // Idempotency check
     const { data: existingTx } = await adminClient
       .from("wallet_transactions")
       .select("id, status")
@@ -29,19 +40,26 @@ export async function GET(req: NextRequest) {
       .single();
 
     if (existingTx && existingTx.status === "success") {
-      // Already processed - redirect to success without re-crediting
       return NextResponse.redirect(
         new URL(`/wallet?status=success&already_processed=true`, req.url)
       );
     }
 
-    const payment = await verifyPayment(transactionReference);
+    // Verify payment with provider
+    const paymentModule = await getPaymentModule();
+    const payment = await paymentModule.verifyPayment(transactionReference);
 
-    if (payment.status !== "PAID") {
+    // Check if payment is successful
+    const isSuccess = 
+      payment.status === "PAID" || 
+      payment.status === "successful" || 
+      payment.status === "success";
+
+    if (!isSuccess) {
       return NextResponse.redirect(new URL("/wallet?status=failed&reason=not_paid", req.url));
     }
 
-    // Atomically credit wallet (prevents race conditions)
+    // Credit wallet atomically
     const { error: creditError } = await adminClient.rpc("credit_wallet_balance", {
       p_user_id: user.id,
       p_amount: payment.amount,
@@ -54,16 +72,14 @@ export async function GET(req: NextRequest) {
 
     // Update or insert transaction record
     if (existingTx) {
-      // Update existing pending transaction
       await adminClient
         .from("wallet_transactions")
         .update({
           status: "success",
-          description: "Wallet top-up via Monnify",
+          description: `Wallet top-up via ${PAYMENT_PROVIDER}`,
         })
         .eq("id", existingTx.id);
     } else {
-      // Insert new transaction record
       await adminClient.from("wallet_transactions").insert({
         user_id: user.id,
         type: "credit",
@@ -71,7 +87,7 @@ export async function GET(req: NextRequest) {
         status: "success",
         method: "transfer",
         reference: transactionReference,
-        description: "Wallet top-up via Monnify",
+        description: `Wallet top-up via ${PAYMENT_PROVIDER}`,
       });
     }
 
