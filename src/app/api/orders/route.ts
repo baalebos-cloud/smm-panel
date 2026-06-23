@@ -47,7 +47,7 @@ export async function POST(req: NextRequest) {
     // Use admin client to bypass RLS
     const adminClient = createAdminClient();
 
-    // Atomically deduct wallet balance (prevents race conditions)
+    // Atomically deduct wallet balance
     const { data: deductResult, error: deductError } = await adminClient.rpc(
       "deduct_wallet_balance",
       {
@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Insufficient wallet balance" }, { status: 400 });
     }
 
-    // Place order with provider
+    // Place order with SMM provider
     let providerOrderId: number | null = null;
     try {
       const providerRes = await placeProviderOrder({
@@ -81,7 +81,8 @@ export async function POST(req: NextRequest) {
         p_user_id: user.id,
         p_amount: cost,
       });
-      return NextResponse.json({ error: "Failed to place order with provider" }, { status: 502 });
+      const errorMessage = providerError instanceof Error ? providerError.message : "Provider unavailable";
+      return NextResponse.json({ error: `Failed to place order: ${errorMessage}` }, { status: 502 });
     }
 
     // Save order to DB
