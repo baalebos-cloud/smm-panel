@@ -3,9 +3,6 @@ import axios from "axios";
 
 const STROWALLET_BASE_URL = "https://strowallet.com/api";
 
-const API_KEY = process.env.STROWALLET_API_KEY!;
-const API_TOKEN = process.env.STROWALLET_API_TOKEN!;
-
 export interface InitializePaymentParams {
   amount: number;
   email: string;
@@ -14,34 +11,22 @@ export interface InitializePaymentParams {
   reference: string;
 }
 
-export interface StrowalletPaymentResponse {
-  status: boolean;
-  message: string;
-  data: {
-    link: string;
-    reference: string;
-  };
-}
-
-export interface StrowalletVerifyResponse {
-  status: boolean;
-  message: string;
-  data: {
-    status: string;
-    amount: number;
-    reference: string;
-  };
-}
-
 // Initialize payment
 export const initializePayment = async (
   params: InitializePaymentParams
 ): Promise<{ checkoutUrl: string; reference: string }> => {
-  const { data } = await axios.post<StrowalletPaymentResponse>(
+  const apiKey = process.env.STROWALLET_API_KEY;
+  const apiToken = process.env.STROWALLET_API_TOKEN;
+
+  if (!apiKey || !apiToken) {
+    throw new Error("Strowallet credentials not configured");
+  }
+
+  const { data } = await axios.post(
     `${STROWALLET_BASE_URL}/payment/initiate`,
     {
-      api_key: API_KEY,
-      api_token: API_TOKEN,
+      api_key: apiKey,
+      api_token: apiToken,
       amount: params.amount,
       email: params.email,
       name: params.name,
@@ -63,7 +48,7 @@ export const initializePayment = async (
 
   return {
     checkoutUrl: data.data.link,
-    reference: data.data.reference,
+    reference: data.data.reference || params.reference,
   };
 };
 
@@ -71,11 +56,18 @@ export const initializePayment = async (
 export const verifyPayment = async (
   reference: string
 ): Promise<{ status: string; amount: number }> => {
-  const { data } = await axios.post<StrowalletVerifyResponse>(
+  const apiKey = process.env.STROWALLET_API_KEY;
+  const apiToken = process.env.STROWALLET_API_TOKEN;
+
+  if (!apiKey || !apiToken) {
+    throw new Error("Strowallet credentials not configured");
+  }
+
+  const { data } = await axios.post(
     `${STROWALLET_BASE_URL}/payment/verify`,
     {
-      api_key: API_KEY,
-      api_token: API_TOKEN,
+      api_key: apiKey,
+      api_token: apiToken,
       reference,
     },
     {
@@ -91,7 +83,7 @@ export const verifyPayment = async (
 
   return {
     status: data.data.status,
-    amount: data.data.amount,
+    amount: Number(data.data.amount),
   };
 };
 

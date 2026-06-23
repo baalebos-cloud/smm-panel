@@ -1,18 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { initializePayment, generateReference } from "@/lib/api/strowallet";
 import { rateLimit } from "@/lib/rate-limit";
-
-// Choose your payment provider
-const PAYMENT_PROVIDER = process.env.PAYMENT_PROVIDER || "monnify"; // "monnify" or "strowallet"
-
-// Dynamic import based on provider
-const getPaymentModule = async () => {
-  if (PAYMENT_PROVIDER === "strowallet") {
-    return await import("@/lib/api/strowallet");
-  }
-  return await import("@/lib/api/monnify");
-};
 
 export async function POST(req: NextRequest) {
   // Rate limiting
@@ -83,31 +73,17 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Failed to retrieve profile" }, { status: 500 });
     }
 
-    // Get payment module
-    const paymentModule = await getPaymentModule();
-    const reference = paymentModule.generateReference(user.id);
+    // Generate payment reference
+    const reference = generateReference(user.id);
 
     try {
-      let payment;
-
-      if (PAYMENT_PROVIDER === "strowallet") {
-        // Strowallet payment
-        payment = await (paymentModule as typeof import("@/lib/api/strowallet")).initializePayment({
-          amount,
-          email: userProfile.email || user.email!,
-          name: userProfile.full_name || "Customer",
-          reference,
-        });
-      } else {
-        // Monnify payment
-        payment = await (paymentModule as typeof import("@/lib/api/monnify")).initializePayment({
-          amount,
-          reference,
-          email: userProfile.email || user.email!,
-          fullName: userProfile.full_name || "Customer",
-          description: "SMMPanel Wallet Top-up",
-        });
-      }
+      // Initialize Strowallet payment
+      const payment = await initializePayment({
+        amount,
+        email: userProfile.email || user.email!,
+        name: userProfile.full_name || "Customer",
+        reference,
+      });
 
       // Log pending transaction
       await adminClient.from("wallet_transactions").insert({
@@ -116,19 +92,18 @@ export async function POST(req: NextRequest) {
         amount,
         status: "pending",
         method: "transfer",
-        reference: payment.reference || reference,
+        reference: payment.reference,
         description: "Wallet top-up (pending)",
       });
 
       return NextResponse.json({
         checkoutUrl: payment.checkoutUrl,
-        reference: payment.reference || reference,
+        reference: payment.reference,
       });
     } catch (paymentError) {
-      console.error("Payment initialization error:", paymentError);
-      return NextResponse.json({ 
-        error: "Payment gateway unavailable. Please try again later." 
-      }, { status: 502 });
+      console.error("Strowallet payment error:", paymentError);
+      const errorMessage = paymentError instanceof Error ? paymentError.message : "Payment gateway unavailable";
+      return NextResponse.json({ error: errorMessage }, { status: 502 });
     }
   } catch (err) {
     console.error("[POST /api/wallet/fund]", err);

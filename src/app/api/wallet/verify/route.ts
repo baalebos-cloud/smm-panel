@@ -1,24 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-
-const PAYMENT_PROVIDER = process.env.PAYMENT_PROVIDER || "monnify";
-
-const getPaymentModule = async () => {
-  if (PAYMENT_PROVIDER === "strowallet") {
-    return await import("@/lib/api/strowallet");
-  }
-  return await import("@/lib/api/monnify");
-};
+import { verifyPayment } from "@/lib/api/strowallet";
 
 export async function GET(req: NextRequest) {
-  // Support both Monnify and Strowallet callback params
-  const transactionReference = 
-    req.nextUrl.searchParams.get("transactionReference") || 
-    req.nextUrl.searchParams.get("reference") ||
-    req.nextUrl.searchParams.get("tx_ref");
+  // Strowallet uses "reference" or "tx_ref" as callback param
+  const reference = 
+    req.nextUrl.searchParams.get("reference") || 
+    req.nextUrl.searchParams.get("tx_ref") ||
+    req.nextUrl.searchParams.get("transactionReference");
 
-  if (!transactionReference) {
+  if (!reference) {
     return NextResponse.redirect(new URL("/wallet?status=failed&reason=missing_reference", req.url));
   }
 
@@ -32,11 +24,11 @@ export async function GET(req: NextRequest) {
 
     const adminClient = createAdminClient();
 
-    // Idempotency check
+    // Idempotency check - prevent double processing
     const { data: existingTx } = await adminClient
       .from("wallet_transactions")
       .select("id, status")
-      .eq("reference", transactionReference)
+      .eq("reference", reference)
       .single();
 
     if (existingTx && existingTx.status === "success") {
@@ -45,18 +37,17 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // Verify payment with provider
-    const paymentModule = await getPaymentModule();
-    const payment = await paymentModule.verifyPayment(transactionReference);
+    // Verify payment with Strowallet
+    const payment = await verifyPayment(reference);
 
     // Check if payment is successful
     const isSuccess = 
-      payment.status === "PAID" || 
-      payment.status === "successful" || 
-      payment.status === "success";
+      payment.status.toLowerCase() === "successful" || 
+      payment.status.toLowerCase() === "success" ||
+      payment.status.toLowerCase() === "paid";
 
     if (!isSuccess) {
-      return NextResponse.redirect(new URL("/wallet?status=failed&reason=not_paid", req.url));
+      return NextResponse.redirect(new URL(`/wallet?status=failed&reason=${payment.status}`, req.url));
     }
 
     // Credit wallet atomically
@@ -76,7 +67,7 @@ export async function GET(req: NextRequest) {
         .from("wallet_transactions")
         .update({
           status: "success",
-          description: `Wallet top-up via ${PAYMENT_PROVIDER}`,
+          description: "Wallet top-up via Strowallet",
         })
         .eq("id", existingTx.id);
     } else {
@@ -86,8 +77,8 @@ export async function GET(req: NextRequest) {
         amount: payment.amount,
         status: "success",
         method: "transfer",
-        reference: transactionReference,
-        description: `Wallet top-up via ${PAYMENT_PROVIDER}`,
+        reference: reference,
+        description: "Wallet top-up via Strowallet",
       });
     }
 
