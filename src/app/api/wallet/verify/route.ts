@@ -4,11 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { verifyPayment } from "@/lib/api/strowallet";
 
 export async function GET(req: NextRequest) {
-  // Strowallet uses "reference" or "tx_ref" as callback param
-  const reference = 
-    req.nextUrl.searchParams.get("reference") || 
-    req.nextUrl.searchParams.get("tx_ref") ||
-    req.nextUrl.searchParams.get("transactionReference");
+  const reference = req.nextUrl.searchParams.get("reference");
 
   if (!reference) {
     return NextResponse.redirect(new URL("/wallet?status=failed&reason=missing_reference", req.url));
@@ -27,7 +23,7 @@ export async function GET(req: NextRequest) {
     // Idempotency check - prevent double processing
     const { data: existingTx } = await adminClient
       .from("wallet_transactions")
-      .select("id, status")
+      .select("id, status, user_id")
       .eq("reference", reference)
       .single();
 
@@ -40,19 +36,23 @@ export async function GET(req: NextRequest) {
     // Verify payment with Strowallet
     const payment = await verifyPayment(reference);
 
+    console.log("Payment verification result:", payment);
+
     // Check if payment is successful
-    const isSuccess = 
-      payment.status.toLowerCase() === "successful" || 
-      payment.status.toLowerCase() === "success" ||
-      payment.status.toLowerCase() === "paid";
+    const isSuccess = payment.status.toLowerCase() === "paid" || 
+                      payment.status.toLowerCase() === "successful" ||
+                      payment.status.toLowerCase() === "success";
 
     if (!isSuccess) {
       return NextResponse.redirect(new URL(`/wallet?status=failed&reason=${payment.status}`, req.url));
     }
 
+    // Determine user ID (from existing tx or current user)
+    const userId = existingTx?.user_id || user.id;
+
     // Credit wallet atomically
     const { error: creditError } = await adminClient.rpc("credit_wallet_balance", {
-      p_user_id: user.id,
+      p_user_id: userId,
       p_amount: payment.amount,
     });
 
@@ -72,7 +72,7 @@ export async function GET(req: NextRequest) {
         .eq("id", existingTx.id);
     } else {
       await adminClient.from("wallet_transactions").insert({
-        user_id: user.id,
+        user_id: userId,
         type: "credit",
         amount: payment.amount,
         status: "success",

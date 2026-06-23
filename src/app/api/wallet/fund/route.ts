@@ -63,7 +63,7 @@ export async function POST(req: NextRequest) {
 
       if (createError) {
         console.error("Failed to create profile:", createError);
-        return NextResponse.json({ error: "Failed to create user profile. Please contact support." }, { status: 500 });
+        return NextResponse.json({ error: "Failed to create user profile." }, { status: 500 });
       }
 
       userProfile = newProfile;
@@ -85,7 +85,7 @@ export async function POST(req: NextRequest) {
         reference,
       });
 
-      // Log pending transaction
+      // Log pending transaction with Strowallet reference
       await adminClient.from("wallet_transactions").insert({
         user_id: user.id,
         type: "credit",
