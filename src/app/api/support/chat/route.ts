@@ -1,19 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getChatReply } from "@/lib/claude";
 import type { ChatMessage } from "@/lib/claude";
-import { rateLimit } from "@/lib/rate-limit";
+
+export const dynamic = 'force-dynamic';
 
 const MAX_MESSAGES = 50;
 const MAX_TOTAL_LENGTH = 50000;
 const MAX_MESSAGE_LENGTH = 5000;
 
 export async function POST(req: NextRequest) {
-  // Rate limiting - 20 requests per minute
-  const rateLimitResponse = rateLimit(req, 20, 60000);
-  if (rateLimitResponse) return rateLimitResponse;
-
   try {
-    const { messages } = (await req.json()) as { messages: ChatMessage[] };
+    const body = await req.json();
+    const { messages } = body as { messages: ChatMessage[] };
 
     // Validate messages format
     if (!messages || !Array.isArray(messages)) {
@@ -32,7 +30,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No messages provided" }, { status: 400 });
     }
 
-    // Validate each message structure and content length
+    // Validate each message
     let totalLength = 0;
     for (const msg of messages) {
       if (!msg.role || !msg.content) {
@@ -46,7 +44,7 @@ export async function POST(req: NextRequest) {
       }
       if (msg.content.length > MAX_MESSAGE_LENGTH) {
         return NextResponse.json(
-          { error: `Individual message too long. Maximum is ${MAX_MESSAGE_LENGTH} characters` },
+          { error: `Message too long. Maximum is ${MAX_MESSAGE_LENGTH} characters` },
           { status: 400 }
         );
       }
@@ -55,7 +53,7 @@ export async function POST(req: NextRequest) {
 
     if (totalLength > MAX_TOTAL_LENGTH) {
       return NextResponse.json(
-        { error: `Total message content too long. Maximum is ${MAX_TOTAL_LENGTH} characters` },
+        { error: `Total content too long. Maximum is ${MAX_TOTAL_LENGTH} characters` },
         { status: 400 }
       );
     }
@@ -63,7 +61,18 @@ export async function POST(req: NextRequest) {
     const reply = await getChatReply(messages);
     return NextResponse.json({ reply });
   } catch (err) {
-    console.error("[POST /api/support/chat]", err);
+    console.error("[POST /api/support/chat] Error:", err);
+    
+    // More specific error messages
+    if (err instanceof Error) {
+      if (err.message.includes("API key")) {
+        return NextResponse.json({ error: "AI service not configured" }, { status: 503 });
+      }
+      if (err.message.includes("rate limit")) {
+        return NextResponse.json({ error: "Too many requests. Please wait a moment." }, { status: 429 });
+      }
+    }
+    
     return NextResponse.json({ error: "AI service unavailable" }, { status: 503 });
   }
 }
