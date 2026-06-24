@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getChatReply } from "@/lib/claude";
-import type { ChatMessage } from "@/lib/claude";
+import { getChatReply } from "@/lib/groq";
+import type { ChatMessage } from "@/lib/groq";
 
-export const dynamic = 'force-dynamic';
+export const dynamic = "force-dynamic";
 
 const MAX_MESSAGES = 50;
 const MAX_TOTAL_LENGTH = 50000;
@@ -13,12 +13,10 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { messages } = body as { messages: ChatMessage[] };
 
-    // Validate messages format
     if (!messages || !Array.isArray(messages)) {
       return NextResponse.json({ error: "Invalid messages format" }, { status: 400 });
     }
 
-    // Validate message count
     if (messages.length > MAX_MESSAGES) {
       return NextResponse.json(
         { error: `Too many messages. Maximum is ${MAX_MESSAGES}` },
@@ -30,7 +28,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No messages provided" }, { status: 400 });
     }
 
-    // Validate each message
     let totalLength = 0;
     for (const msg of messages) {
       if (!msg.role || !msg.content) {
@@ -62,17 +59,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ reply });
   } catch (err) {
     console.error("[POST /api/support/chat] Error:", err);
-    
-    // More specific error messages
+
     if (err instanceof Error) {
       if (err.message.includes("API key")) {
         return NextResponse.json({ error: "AI service not configured" }, { status: 503 });
       }
-      if (err.message.includes("rate limit")) {
+      if (err.message.includes("rate limit") || err.message.includes("429")) {
         return NextResponse.json({ error: "Too many requests. Please wait a moment." }, { status: 429 });
       }
     }
-    
+
     return NextResponse.json({ error: "AI service unavailable" }, { status: 503 });
   }
 }
