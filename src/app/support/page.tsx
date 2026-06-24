@@ -1,6 +1,10 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
-import type { ChatMessage } from "@/lib/claude";
+
+interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
 
 export default function SupportPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -91,9 +95,7 @@ export default function SupportPage() {
               ].map((q) => (
                 <button
                   key={q}
-                  onClick={() => {
-                    setInput(q);
-                  }}
+                  onClick={() => setInput(q)}
                   style={{
                     padding: "8px 14px",
                     background: "#1e2840",
@@ -132,6 +134,7 @@ export default function SupportPage() {
                 lineHeight: 1.5,
                 borderBottomRightRadius: msg.role === "user" ? 4 : 16,
                 borderBottomLeftRadius: msg.role === "user" ? 16 : 4,
+                whiteSpace: "pre-wrap",
               }}
             >
               {msg.content}
@@ -151,9 +154,7 @@ export default function SupportPage() {
                 fontSize: 14,
               }}
             >
-              <span style={{ display: "inline-block", animation: "pulse 1s infinite" }}>
-                Thinking...
-              </span>
+              Thinking...
             </div>
           </div>
         )}
