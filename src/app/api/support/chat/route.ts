@@ -13,10 +13,12 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { messages } = body as { messages: ChatMessage[] };
 
+    // Validate messages format
     if (!messages || !Array.isArray(messages)) {
       return NextResponse.json({ error: "Invalid messages format" }, { status: 400 });
     }
 
+    // Validate message count
     if (messages.length > MAX_MESSAGES) {
       return NextResponse.json(
         { error: `Too many messages. Maximum is ${MAX_MESSAGES}` },
@@ -28,6 +30,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No messages provided" }, { status: 400 });
     }
 
+    // Validate each message structure and content length
     let totalLength = 0;
     for (const msg of messages) {
       if (!msg.role || !msg.content) {
@@ -41,7 +44,7 @@ export async function POST(req: NextRequest) {
       }
       if (msg.content.length > MAX_MESSAGE_LENGTH) {
         return NextResponse.json(
-          { error: `Message too long. Maximum is ${MAX_MESSAGE_LENGTH} characters` },
+          { error: `Individual message too long. Maximum is ${MAX_MESSAGE_LENGTH} characters` },
           { status: 400 }
         );
       }
@@ -50,7 +53,7 @@ export async function POST(req: NextRequest) {
 
     if (totalLength > MAX_TOTAL_LENGTH) {
       return NextResponse.json(
-        { error: `Total content too long. Maximum is ${MAX_TOTAL_LENGTH} characters` },
+        { error: `Total message content too long. Maximum is ${MAX_TOTAL_LENGTH} characters` },
         { status: 400 }
       );
     }
@@ -60,12 +63,16 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     console.error("[POST /api/support/chat] Error:", err);
 
+    // More specific error messages
     if (err instanceof Error) {
-      if (err.message.includes("API key")) {
+      if (err.message.includes("API key") || err.message.includes("api_key")) {
         return NextResponse.json({ error: "AI service not configured" }, { status: 503 });
       }
       if (err.message.includes("rate limit") || err.message.includes("429")) {
         return NextResponse.json({ error: "Too many requests. Please wait a moment." }, { status: 429 });
+      }
+      if (err.message.includes("model")) {
+        return NextResponse.json({ error: "AI model unavailable" }, { status: 503 });
       }
     }
 
